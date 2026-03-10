@@ -1,0 +1,4 @@
+fixtures/
+.cache/
+logs/
+test-outputs/
