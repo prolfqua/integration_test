@@ -2,7 +2,7 @@ test_that("QC pipeline runs with MAXQUANT software on IonStar fixture", {
   skip_on_cran()
 
   # Note: CMD_QUANT_QC.R uses prolfqua_preprocess_functions (unprefixed keys),
-  # unlike CMD_DEA.R which uses get_procfuncs() (prefixed keys).
+  # unlike CMD_DEA_V2.R which uses get_procfuncs() (prefixed keys).
   # So QC needs plain "MAXQUANT", not "prolfquapp.MAXQUANT".
   res <- run_qc(
     fixture_name = "maxquant_ionstar",
@@ -19,5 +19,5 @@ test_that("QC pipeline runs with MAXQUANT software on IonStar fixture", {
   expect_gt(length(outputs$html), 0, label = "QC HTML report(s) produced")
   expect_gt(length(outputs$xlsx), 0, label = "QC XLSX file(s) produced")
 
-  unlink(res$workdir, recursive = TRUE)
+  # outputs persist in test-outputs/ for inspection
 })

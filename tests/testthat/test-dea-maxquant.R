@@ -41,5 +41,5 @@ test_that("DEA pipeline runs with MAXQUANT software on IonStar fixture", {
   expect_gt(sum(!is.na(first_contrast$diff)), 0, label = "Non-NA diff values")
 
   # Clean up
-  unlink(res$workdir, recursive = TRUE)
+  # outputs persist in test-outputs/ for inspection
 })

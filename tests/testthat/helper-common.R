@@ -24,14 +24,6 @@ find_fixture_dir <- function() {
 
 FIXTURE_DIR <- find_fixture_dir()
 
-# Get the path to CMD_DEA.R from the installed prolfquapp package
-get_cmd_dea_path <- function() {
-  pkg_path <- system.file(package = "prolfquapp")
-  script <- file.path(pkg_path, "application", "CMD_DEA.R")
-  stopifnot(file.exists(script))
-  script
-}
-
 # Get the path to CMD_DEA_V2.R from the installed prolfquapp package
 get_cmd_dea_v2_path <- function() {
   pkg_path <- system.file(package = "prolfquapp")
@@ -48,7 +40,7 @@ get_cmd_qc_path <- function() {
   script
 }
 
-# Run CMD_DEA.R in a temp directory with the given fixture
+# Run CMD_DEA_V2.R in a temp directory with the given fixture
 # Returns the output directory path
 run_dea <- function(fixture_name,
                     software,
@@ -58,8 +50,9 @@ run_dea <- function(fixture_name,
   fixture_path <- file.path(FIXTURE_DIR, fixture_name)
   stopifnot(dir.exists(fixture_path))
 
-  # Create a temporary working directory
-  workdir <- file.path(tempdir(), paste0("dea_", fixture_name, "_", format(Sys.time(), "%H%M%S")))
+  # Create working directory under test-outputs/ so results persist for inspection
+  output_base <- normalizePath(file.path(FIXTURE_DIR, "..", "test-outputs"), mustWork = FALSE)
+  workdir <- file.path(output_base, paste0("dea_", fixture_name, "_", format(Sys.time(), "%H%M%S")))
   dir.create(workdir, recursive = TRUE, showWarnings = FALSE)
 
   # Copy fixture contents to workdir
@@ -72,7 +65,7 @@ run_dea <- function(fixture_name,
   # Build command args
   args <- c(
     "--vanilla",
-    get_cmd_dea_path(),
+    get_cmd_dea_v2_path(),
     "-i", workdir,
     "-d", file.path(workdir, dataset_file),
     "-y", file.path(workdir, config_file),
@@ -83,7 +76,7 @@ run_dea <- function(fixture_name,
     args <- c(args, "-w", workunit)
   }
 
-  # CMD_DEA.R's copy_DEA_Files() copies Rmd to cwd, so run from workdir
+  # CMD_DEA_V2.R copies Rmd to cwd, so run from workdir
   cmd <- paste(
     "cd", shQuote(workdir), "&&",
     "Rscript", paste(shQuote(args), collapse = " ")
@@ -112,7 +105,8 @@ run_qc <- function(fixture_name,
   fixture_path <- file.path(FIXTURE_DIR, fixture_name)
   stopifnot(dir.exists(fixture_path))
 
-  workdir <- file.path(tempdir(), paste0("qc_", fixture_name, "_", format(Sys.time(), "%H%M%S")))
+  output_base <- normalizePath(file.path(FIXTURE_DIR, "..", "test-outputs"), mustWork = FALSE)
+  workdir <- file.path(output_base, paste0("qc_", fixture_name, "_", format(Sys.time(), "%H%M%S")))
   dir.create(workdir, recursive = TRUE, showWarnings = FALSE)
 
   file.copy(

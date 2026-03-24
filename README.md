@@ -1,6 +1,6 @@
 # Integration Tests for prolfquapp CLI Pipelines
 
-Cross-package integration tests for `prolfqua_dea.sh` (CMD_DEA.R) and `prolfqua_qc.sh` (CMD_QUANT_QC.R). These test the full pipeline end-to-end using small fixture datasets (~100 proteins) subsetted from real data.
+Cross-package integration tests for `prolfqua_dea.sh` (CMD_DEA_V2.R) and `prolfqua_qc.sh` (CMD_QUANT_QC.R). These test the full pipeline end-to-end using small fixture datasets (~100 proteins) subsetted from real data.
 
 ## Prerequisites
 
@@ -66,31 +66,32 @@ integration_test/
 
 | Test file | Script tested | Software flag | Fixture | What it checks |
 |-----------|--------------|---------------|---------|----------------|
-| test-dea-maxquant | CMD_DEA.R | `prolfquapp.MAXQUANT` | maxquant_ionstar | HTML, XLSX, SE.rds, RNK, parquet; SE has contrast columns with diff/FDR |
-| test-dea-msstats | CMD_DEA.R | `prolfquapp.MSSTATS` | fragpipe_ionstar | Same outputs; different preprocessor path |
-| test-dea-fp-tmt | CMD_DEA.R | `prolfquapp.FP_TMT` | fp_tmt_total | Same + verifies >=4 complex contrasts (2x3 factorial design) |
-| test-dea-fp-singlesite | CMD_DEA.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
+| test-dea-maxquant | CMD_DEA_V2.R | `prolfquapp.MAXQUANT` | maxquant_ionstar | HTML, XLSX, SE.rds, RNK, parquet; SE has contrast columns with diff/FDR |
+| test-dea-msstats | CMD_DEA_V2.R | `prolfquapp.MSSTATS` | fragpipe_ionstar | Same outputs; different preprocessor path |
+| test-dea-fp-tmt | CMD_DEA_V2.R | `prolfquapp.FP_TMT` | fp_tmt_total | Same + verifies >=4 complex contrasts (2x3 factorial design) |
+| test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
 | test-qc-maxquant | CMD_QUANT_QC.R | `MAXQUANT` | maxquant_ionstar | HTML reports + XLSX produced |
-| test-dea-regression | CMD_DEA.R | all | all fixtures | Compares SE fold-changes against saved references (tolerance 1e-3) |
+| test-dea-regression | CMD_DEA_V2.R | all | all fixtures | Compares SE fold-changes against saved references (correlation > 0.999) |
 
 ### Software naming gotcha
 
-CMD_DEA.R uses `get_procfuncs()` which returns **prefixed** keys like `prolfquapp.MAXQUANT`. CMD_QUANT_QC.R uses `prolfqua_preprocess_functions` directly with **unprefixed** keys like `MAXQUANT`. The test files and fixture configs reflect this difference.
+CMD_DEA_V2.R uses `get_procfuncs()` which returns **prefixed** keys like `prolfquapp.MAXQUANT`. CMD_QUANT_QC.R uses `prolfqua_preprocess_functions` directly with **unprefixed** keys like `MAXQUANT`. The test files and fixture configs reflect this difference.
 
 ## Regression Tests
 
-The regression test (`test-dea-regression.R`) compares SummarizedExperiment outputs against saved baselines. References don't exist initially — tests skip with a message.
+The regression test (`test-dea-regression.R`) compares SummarizedExperiment outputs against saved baselines. **References must be generated from the released Docker image** (`prolfqua/prolfquapp:latest`) to detect regressions against the published version.
 
 ```bash
-make save-references    # run all 4 DEA pipelines, save baseline SE objects
-make test-dea-regression  # compare new runs against baselines
+make save-references-docker   # generate baselines from released Docker image
+make test-dea-regression      # compare local dev output against Docker baselines
 ```
 
-After intentional changes to the analysis results:
+On ARM Mac, Docker runs with `--platform linux/amd64` (Rosetta emulation). The `fp_singlesite_phospho` fixture is skipped because the Docker image doesn't include `prolfquappPTMreaders`.
+
+A local `save-references` target also exists for re-baselining after a new release:
 
 ```bash
-make clean-references   # remove old baselines
-make save-references    # regenerate
+make save-references    # generate baselines from local dev install
 ```
 
 ## How it works
@@ -98,7 +99,7 @@ make save-references    # regenerate
 Each test:
 
 1. Copies a fixture directory into a fresh temp dir
-2. Runs `CMD_DEA.R` or `CMD_QUANT_QC.R` via `system()` (as a subprocess, same as the shell scripts)
+2. Runs `CMD_DEA_V2.R` or `CMD_QUANT_QC.R` via `system()` (as a subprocess, same as the shell scripts)
 3. Asserts expected output files exist
 4. For DEA: loads `SummarizedExperiment.rds` and checks structure (dimensions, nested contrast DataFrames with `diff`/`FDR` columns, non-NA values)
 5. Cleans up the temp dir

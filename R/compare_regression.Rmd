@@ -1,0 +1,202 @@
+---
+title: "`r params$title`"
+output:
+  bookdown::html_document2:
+    toc: true
+    toc_float: true
+    number_sections: true
+params:
+  ref_se_path: NULL
+  test_se_path: NULL
+  title: "Regression Comparison"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 6, fig.height = 5)
+library(SummarizedExperiment)
+library(ggplot2)
+```
+
+```{r load-data}
+stopifnot(!is.null(params$ref_se_path), file.exists(params$ref_se_path))
+stopifnot(!is.null(params$test_se_path), file.exists(params$test_se_path))
+
+ref_se <- readRDS(params$ref_se_path)
+test_se <- readRDS(params$test_se_path)
+```
+
+# Overview
+
+Comparing **reference** (`r basename(params$ref_se_path)`) against **test** (`r basename(params$test_se_path)`).
+
+| | Reference | Test |
+|---|---|---|
+| Rows | `r nrow(ref_se)` | `r nrow(test_se)` |
+| Columns | `r ncol(ref_se)` | `r ncol(test_se)` |
+| Assays | `r paste(assayNames(ref_se), collapse=", ")` | `r paste(assayNames(test_se), collapse=", ")` |
+
+```{r rowdata-cols}
+ref_rd_cols <- colnames(rowData(ref_se))
+test_rd_cols <- colnames(rowData(test_se))
+rd_shared <- intersect(ref_rd_cols, test_rd_cols)
+rd_ref_only <- setdiff(ref_rd_cols, test_rd_cols)
+rd_test_only <- setdiff(test_rd_cols, ref_rd_cols)
+
+col_overlap <- data.frame(
+  Category = c("Shared", "Reference only", "Test only"),
+  Count = c(length(rd_shared), length(rd_ref_only), length(rd_test_only))
+)
+knitr::kable(col_overlap, caption = "rowData column overlap")
+```
+
+```{r rowdata-diffs, results='asis'}
+if (length(rd_ref_only) > 0) {
+  cat("\n**Reference-only rowData columns:**", paste0("`", rd_ref_only, "`", collapse = ", "), "\n")
+}
+if (length(rd_test_only) > 0) {
+  cat("\n**Test-only rowData columns:**", paste0("`", rd_test_only, "`", collapse = ", "), "\n")
+}
+```
+
+# Row ID Overlap
+
+```{r venn}
+ref_ids <- rownames(ref_se)
+test_ids <- rownames(test_se)
+shared <- intersect(ref_ids, test_ids)
+ref_only <- setdiff(ref_ids, test_ids)
+test_only <- setdiff(test_ids, ref_ids)
+
+overlap_df <- data.frame(
+  Category = c("Shared", "Reference only", "Test only"),
+  Count = c(length(shared), length(ref_only), length(test_only))
+)
+knitr::kable(overlap_df, caption = "Row ID overlap between reference and test SE objects.")
+```
+
+```{r venn-details, results='asis'}
+if (length(ref_only) > 0 && length(ref_only) <= 20) {
+  cat("\n**Reference-only IDs:**", paste0("`", ref_only, "`", collapse = ", "), "\n")
+}
+if (length(test_only) > 0 && length(test_only) <= 20) {
+  cat("\n**Test-only IDs:**", paste0("`", test_only, "`", collapse = ", "), "\n")
+}
+```
+
+```{r restrict-shared}
+# Restrict to shared rows for all subsequent comparisons
+ref_se <- ref_se[shared, ]
+test_se <- test_se[shared, ]
+```
+
+# Assay: transformedData {.tabset}
+
+Per-sample scatterplots of normalized abundances (reference vs test) for shared proteins.
+
+```{r scatter-fn}
+scatter_with_cor <- function(x, y, xlab, ylab, main) {
+  both_valid <- !is.na(x) & !is.na(y)
+  r <- if (sum(both_valid) > 2) cor(x[both_valid], y[both_valid]) else NA
+  df <- data.frame(ref = x, test = y)
+  ggplot(df, aes(x = ref, y = test)) +
+    geom_point(alpha = 0.3, size = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+    labs(x = xlab, y = ylab,
+         title = main,
+         subtitle = sprintf("r = %.4f  (n = %d)", r, sum(both_valid))) +
+    theme_minimal()
+}
+```
+
+```{r assay-scatter, results='asis', fig.width=5, fig.height=5}
+assay_name <- if ("transformedData" %in% assayNames(ref_se)) "transformedData" else assayNames(ref_se)[1]
+ref_mat <- assay(ref_se, assay_name)
+test_mat <- assay(test_se, assay_name)
+
+shared_samples <- intersect(colnames(ref_mat), colnames(test_mat))
+
+for (samp in shared_samples) {
+  cat(sprintf("\n## %s\n\n", samp))
+  p <- scatter_with_cor(
+    ref_mat[, samp], test_mat[, samp],
+    xlab = "Reference", ylab = "Test",
+    main = paste0(assay_name, ": ", samp)
+  )
+  print(p)
+  cat("\n\n")
+}
+```
+
+# Contrast Results {.tabset}
+
+```{r contrast-setup}
+ref_rd <- rowData(ref_se)
+test_rd <- rowData(test_se)
+
+ref_contrast_cols <- grep("^constrast_", colnames(ref_rd), value = TRUE)
+test_contrast_cols <- grep("^constrast_", colnames(test_rd), value = TRUE)
+shared_contrasts <- intersect(ref_contrast_cols, test_contrast_cols)
+
+stat_cols <- c("diff", "statistic", "p.value", "FDR")
+```
+
+```{r contrast-scatter, results='asis', fig.width=5, fig.height=5}
+for (cc in shared_contrasts) {
+  cat(sprintf("\n## %s {.tabset}\n\n", cc))
+
+  ref_df <- as.data.frame(ref_rd[[cc]])
+  test_df <- as.data.frame(test_rd[[cc]])
+
+  for (sc in stat_cols) {
+    if (sc %in% colnames(ref_df) && sc %in% colnames(test_df)) {
+      cat(sprintf("\n### %s\n\n", sc))
+      p <- scatter_with_cor(
+        as.numeric(ref_df[[sc]]), as.numeric(test_df[[sc]]),
+        xlab = paste("Reference", sc), ylab = paste("Test", sc),
+        main = paste0(cc, ": ", sc)
+      )
+      print(p)
+      cat("\n\n")
+    }
+  }
+}
+```
+
+# Summary
+
+```{r summary-table}
+# Compute overall correlations for each assay and contrast statistic
+summary_rows <- list()
+
+# Assay correlations
+for (an in intersect(assayNames(ref_se), assayNames(test_se))) {
+  rv <- as.numeric(assay(ref_se, an))
+  tv <- as.numeric(assay(test_se, an))
+  both <- !is.na(rv) & !is.na(tv)
+  r <- if (sum(both) > 2) cor(rv[both], tv[both]) else NA
+  summary_rows[[length(summary_rows) + 1]] <- data.frame(
+    Source = an, Column = "all samples", r = round(r, 6), n = sum(both)
+  )
+}
+
+# Contrast correlations
+for (cc in shared_contrasts) {
+  ref_df <- as.data.frame(ref_rd[[cc]])
+  test_df <- as.data.frame(test_rd[[cc]])
+  for (sc in stat_cols) {
+    if (sc %in% colnames(ref_df) && sc %in% colnames(test_df)) {
+      rv <- as.numeric(ref_df[[sc]])
+      tv <- as.numeric(test_df[[sc]])
+      both <- !is.na(rv) & !is.na(tv)
+      r <- if (sum(both) > 2) cor(rv[both], tv[both]) else NA
+      summary_rows[[length(summary_rows) + 1]] <- data.frame(
+        Source = cc, Column = sc, r = round(r, 6), n = sum(both)
+      )
+    }
+  }
+}
+
+summary_df <- do.call(rbind, summary_rows)
+knitr::kable(summary_df, caption = "Pearson correlation summary (reference vs test).", row.names = FALSE)
+```

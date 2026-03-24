@@ -31,5 +31,5 @@ test_that("DEA pipeline runs with MSSTATS software on FragPipe IonStar fixture",
   expect_true("FDR" %in% colnames(first_contrast))
   expect_gt(sum(!is.na(first_contrast$diff)), 0, label = "Non-NA diff values")
 
-  unlink(res$workdir, recursive = TRUE)
+  # outputs persist in test-outputs/ for inspection
 })

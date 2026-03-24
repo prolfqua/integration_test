@@ -41,21 +41,79 @@ fixtures/.stamp:
 	Rscript R/create_test_fixtures.R
 	touch $@
 
-save-references: fixtures  ## Save baseline SummarizedExperiment objects for regression
+DOCKER_SH := $(CURDIR)/prolfquapp_docker.sh
+REFDIR := reference
+
+# Copy prolfquapp_docker.sh from the installed package (or Docker image) if not present
+$(DOCKER_SH):
+	R --vanilla -e "prolfquapp::copy_docker_script(workdir = '$(CURDIR)')"
+	chmod +x $@
+
+# Helper: run DEA in Docker for one fixture, extract SummarizedExperiment.rds
+# prolfquapp_docker.sh mounts cwd at /work, so we set up a workdir with fixture data + output.
+# Usage: $(call docker_dea,fixture_name,dataset_file,software,ref_key)
+define docker_dea
+	@echo "--- Generating reference: $(4) from fixture $(1) ---"
+	rm -rf test-outputs/docker_$(4)
+	mkdir -p test-outputs/docker_$(4)
+	cp -r $(CURDIR)/fixtures/$(1)/* test-outputs/docker_$(4)/
+	cd test-outputs/docker_$(4) && $(DOCKER_SH) prolfqua_dea.sh \
+		-i . -d $(2) -y config.yaml \
+		-s $(3) -o . -w ref_$(4)
+	@se=$$(find test-outputs/docker_$(4) -name 'SummarizedExperiment.rds' | head -1); \
+	if [ -z "$$se" ]; then echo "ERROR: No SummarizedExperiment.rds found for $(4)"; exit 1; fi; \
+	cp "$$se" $(REFDIR)/$(4)_SE.rds; \
+	echo "  Saved: $(REFDIR)/$(4)_SE.rds"
+endef
+
+save-references-docker: fixtures $(DOCKER_SH)  ## Generate regression references from released Docker image
+	mkdir -p $(REFDIR)
+	$(call docker_dea,maxquant_ionstar,dataset.csv,prolfquapp.MAXQUANT,maxquant)
+	$(call docker_dea,fragpipe_ionstar,dataset.csv,prolfquapp.MSSTATS,msstats)
+	$(call docker_dea,fp_tmt_total,dataset_with_contrasts.tsv,prolfquapp.FP_TMT,fp_tmt)
+	@echo "=== References saved to $(REFDIR)/ (fp_singlesite skipped - not in Docker image) ==="
+
+save-references: fixtures  ## Save baseline SE objects using local dev install (for re-baselining)
 	Rscript -e "library(testthat); source('tests/testthat/helper-common.R'); source('tests/testthat/test-dea-regression.R'); save_references()"
 
 install:  ## Reinstall prolfqua + prolfquapp + prolfquappPTMreaders from local source
-	Rscript -e "devtools::install('../prolfqua', quick = TRUE, upgrade = 'never')"
-	Rscript -e "devtools::install('../prolfquapp', quick = TRUE, upgrade = 'never')"
-	Rscript -e "devtools::install('../prolfquappPTMreaders', quick = TRUE, upgrade = 'never')"
+	Rscript -e "devtools::install('../prolfqua', upgrade = 'never')"
+	Rscript -e "devtools::install('../prolfquapp', build_vignettes = TRUE, upgrade = 'never')"
+	Rscript -e "devtools::install('../prolfquappPTMreaders', upgrade = 'never')"
 
-clean:  ## Remove all fixtures and start fresh
+COMPARE_RMD := R/compare_regression.Rmd
+
+# Fixture-to-reference mapping for compare-regression
+COMPARE_FIXTURES := maxquant:maxquant_ionstar msstats:fragpipe_ionstar fp_tmt:fp_tmt_total
+
+compare-regression:  ## Render visual comparison reports (ref vs dev) for each fixture
+	@for entry in $(COMPARE_FIXTURES); do \
+		key=$${entry%%:*}; fixture=$${entry##*:}; \
+		ref=$(REFDIR)/$${key}_SE.rds; \
+		if [ ! -f "$$ref" ]; then echo "SKIP $$key: no reference (run make save-references-docker)"; continue; fi; \
+		test_se=$$(find test-outputs -path "*/dea_$${fixture}_*/**/SummarizedExperiment.rds" -newer "$$ref" 2>/dev/null | sort | tail -1); \
+		if [ -z "$$test_se" ]; then \
+			test_se=$$(find test-outputs -path "*/dea_$${fixture}_*/*/SummarizedExperiment.rds" 2>/dev/null | sort | tail -1); \
+		fi; \
+		if [ -z "$$test_se" ]; then echo "SKIP $$key: no test output (run make test first)"; continue; fi; \
+		echo "--- Rendering comparison: $$key ---"; \
+		echo "  ref:  $$ref"; \
+		echo "  test: $$test_se"; \
+		Rscript -e "rmarkdown::render('$(CURDIR)/$(COMPARE_RMD)', \
+			params = list(ref_se_path = '$(CURDIR)/$$ref', \
+			              test_se_path = '$(CURDIR)/$$test_se', \
+			              title = 'Regression: $${key}'), \
+			output_file = '$(CURDIR)/test-outputs/compare_$${key}.html')"; \
+	done
+	@echo "=== Comparison reports in test-outputs/compare_*.html ==="
+
+clean:  ## Remove fixtures, logs, and dev test outputs (keeps Docker references)
 	rm -rf fixtures
 	rm -rf tests/testthat/_snaps
 	rm -rf $(LOGDIR)
-	rm -rf test-outputs
+	find test-outputs -maxdepth 1 -mindepth 1 ! -name 'docker_*' -exec rm -rf {} + 2>/dev/null || true
 
 clean-references:  ## Remove only regression references (keeps fixtures)
-	rm -rf fixtures/reference
+	rm -rf $(REFDIR)
 
-.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-internal save-references install clean clean-references
+.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-internal save-references save-references-docker compare-regression install clean clean-references
