@@ -2,3 +2,6 @@ fixtures/
 .cache/
 logs/
 test-outputs/
+reference/
+prolfquapp_docker.sh
+.DS_Store
