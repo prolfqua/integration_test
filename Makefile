@@ -110,8 +110,12 @@ compare-regression:  ## Render visual comparison reports (ref vs dev) for each f
 wu345302-facades:  ## Run all registered WU345302 facade models and summarize correlations
 	bash scripts/run_wu345302_facades.sh
 
-clean:  ## Remove fixtures, logs, and dev test outputs (keeps Docker references)
-	rm -rf fixtures
+clean:  ## Remove generated fixtures, logs, and dev test outputs (keeps WU345302 and Docker references)
+	rm -rf fixtures/.stamp
+	rm -rf fixtures/maxquant_ionstar
+	rm -rf fixtures/fragpipe_ionstar
+	rm -rf fixtures/fp_tmt_total
+	rm -rf fixtures/fp_singlesite_phospho
 	rm -rf tests/testthat/_snaps
 	rm -rf $(LOGDIR)
 	find test-outputs -maxdepth 1 -mindepth 1 ! -name 'docker_*' -exec rm -rf {} + 2>/dev/null || true

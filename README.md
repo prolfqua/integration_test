@@ -182,10 +182,13 @@ The helper functions `run_dea()` and `run_qc()` in `helper-common.R` handle the 
 ## Regenerating fixtures
 
 ```bash
-make clean              # remove all fixtures
+make clean              # remove generated fixtures and outputs, keep diann_wu345302
 make fixtures           # regenerate from source data
 ```
 
 `make fixtures` regenerates the standard MaxQuant, MSstats, FP_TMT, and FP_singlesite fixtures from `prolfquadata` and
 the Zenodo PTM archive. It does not currently recreate the local `diann_wu345302` payload used by
-`make wu345302-facades`; restore that fixture separately before running the WU345302 facade matrix after `make clean`.
+`make wu345302-facades`.
+
+`make clean` removes the generated standard fixtures, logs, and development outputs, but intentionally keeps
+`fixtures/diann_wu345302` because that local DIA-NN payload is not recreated by `make fixtures`.
