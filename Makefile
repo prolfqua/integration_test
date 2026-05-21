@@ -3,7 +3,7 @@ export NOT_CRAN=true
 .DEFAULT_GOAL := help
 
 help:  ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 
 LOGDIR := logs
 
@@ -107,6 +107,9 @@ compare-regression:  ## Render visual comparison reports (ref vs dev) for each f
 	done
 	@echo "=== Comparison reports in test-outputs/compare_*.html ==="
 
+wu345302-facades:  ## Run all registered WU345302 facade models and summarize correlations
+	bash scripts/run_wu345302_facades.sh
+
 clean:  ## Remove fixtures, logs, and dev test outputs (keeps Docker references)
 	rm -rf fixtures
 	rm -rf tests/testthat/_snaps
@@ -116,4 +119,4 @@ clean:  ## Remove fixtures, logs, and dev test outputs (keeps Docker references)
 clean-references:  ## Remove only regression references (keeps fixtures)
 	rm -rf $(REFDIR)
 
-.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-internal save-references save-references-docker compare-regression install clean clean-references
+.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-internal save-references save-references-docker compare-regression wu345302-facades install clean clean-references

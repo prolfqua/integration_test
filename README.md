@@ -21,6 +21,39 @@ make fixtures           # generate fixture data from real datasets (one-time, ~3
 make test               # run all integration tests (~2-3 min)
 ```
 
+## Repository and Data Policy
+
+The Git repository should stay small enough to clone and review quickly. Track source code, test code, scripts,
+documentation, small configs, and fixture metadata. Do not track generated outputs or bulky real-data payloads.
+
+Tracked in Git:
+- `README.md`, `CLAUDE.md`, `Makefile`, `.gitignore`
+- `R/`, `scripts/`, `tests/`, and TODO/planning documents
+- lightweight fixture documentation such as `fixtures/README.md`
+
+Ignored locally:
+- `fixtures/*` payload directories
+- `.cache/`
+- `logs/`
+- `test-outputs/`
+- `reference/`
+- `prolfquapp_docker.sh`
+
+The current local checkout can be multiple gigabytes because `test-outputs/` duplicates inputs and rendered reports.
+This is expected locally, but those files should not be committed. If a large fixture becomes required for reproducible
+remote use, prefer an explicit download/regeneration step with checksums. Use Git LFS only after deciding that a fixture
+must live with the repository despite its size.
+
+When publishing this project, a natural remote is a dedicated repository under the `prolfqua` GitHub organization. Before
+the first push, check the candidate commit with:
+
+```bash
+git status --short --ignored
+git ls-files -z | xargs -0 du -h | sort -h | tail
+```
+
+Only ignored local data should account for large disk usage.
+
 ### Typical workflow after editing prolfqua
 
 ```bash
@@ -35,8 +68,36 @@ make test               # check nothing broke
 make test-dea-maxquant
 make test-qc-maxquant
 make test-dea-fp-singlesite
+make test-dea-internal
 # etc. — see make help for the full list
 ```
+
+### Run the WU345302 facade matrix
+
+The WU345302 facade matrix is a broader CLI smoke test for all registered DEA facade models on the same DIA-NN fixture.
+It is useful after changing model facades, contrast adapters, or peptide-to-protein workflows.
+
+```bash
+make wu345302-facades
+```
+
+This target runs:
+
+```bash
+bash scripts/run_wu345302_facades.sh
+```
+
+The script writes its outputs under `test-outputs/wu345302_facades/`:
+
+| File | Purpose |
+|------|---------|
+| `status.tsv` | Per-model command status and exit code |
+| `failures.tsv` | Failed models with log file paths and extracted error messages |
+| `model_summary.tsv` | Row counts, finite FDR/diff counts, significant counts, and report links |
+| `pairwise_vs_limma_impute.tsv` | Pairwise comparisons against the `limma_impute` reference model |
+
+The facade matrix uses installed package entry points by default. Run `make install` first when you want the installed
+CLI scripts to reflect the current local package sources.
 
 ## What's in here
 
@@ -44,12 +105,9 @@ make test-dea-fp-singlesite
 integration_test/
   R/
     create_test_fixtures.R         # One-time fixture generator
-  fixtures/                        # Generated test data (not checked in)
-    maxquant_ionstar/              # ~100 proteins, peptides.txt format
-    fragpipe_ionstar/              # ~50 proteins, MSstats.csv format
-    fp_tmt_total/                  # ~100 proteins, psm.tsv (TMT)
-    fp_singlesite_phospho/         # ~50 proteins, abundance_single-site_None.tsv
-    reference/                     # Baseline SummarizedExperiment.rds (after make save-references)
+  fixtures/
+    README.md                      # Fixture data policy; payload directories are ignored
+  reference/                       # Ignored regression references after make save-references
   tests/
     testthat.R                     # Entry point for testthat::test_dir()
     testthat/
@@ -60,6 +118,10 @@ integration_test/
       test-dea-fp-singlesite.R     # DEA with FP_singlesite preprocessor (phospho PTM)
       test-qc-maxquant.R           # QC pipeline (CMD_QUANT_QC.R)
       test-dea-regression.R        # Compare outputs against saved reference SE objects
+      test-dea-internal-calibration.R # DEA with internal calibration
+  scripts/
+    run_wu345302_facades.sh        # Run all registered WU345302 facade models
+    summarize_wu345302_facades.R   # Summarize model outputs and write failures.tsv
 ```
 
 ## Test Details
@@ -72,6 +134,7 @@ integration_test/
 | test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
 | test-qc-maxquant | CMD_QUANT_QC.R | `MAXQUANT` | maxquant_ionstar | HTML reports + XLSX produced |
 | test-dea-regression | CMD_DEA_V2.R | all | all fixtures | Compares SE fold-changes against saved references (correlation > 0.999) |
+| test-dea-internal | CMD_DEA_V2.R | internal fixture config | internal calibration fixture | Checks `center_to_reference` internal calibration workflow |
 
 ### Software naming gotcha
 
@@ -114,6 +177,7 @@ The helper functions `run_dea()` and `run_qc()` in `helper-common.R` handle the 
 | fragpipe_ionstar | prolfquadata | IonStar MSFragger ZIP / `MSstats.csv` | ~50 proteins, groups B vs E |
 | fp_tmt_total | prophosqua | PTM_example_analysis_v2 / `psm.tsv` (70 MB) | ~100 proteins, 22 samples, 4 contrasts |
 | fp_singlesite_phospho | prophosqua | PTM_example_analysis_v2 / `abundance_single-site_None.tsv` | ~50 proteins (multiple sites each), 22 samples, 4 contrasts |
+| diann_wu345302 | local fixture payload | DIA-NN report, FASTA files, dataset, and config template | WU345302 facade matrix |
 
 ## Regenerating fixtures
 
@@ -121,3 +185,7 @@ The helper functions `run_dea()` and `run_qc()` in `helper-common.R` handle the 
 make clean              # remove all fixtures
 make fixtures           # regenerate from source data
 ```
+
+`make fixtures` regenerates the standard MaxQuant, MSstats, FP_TMT, and FP_singlesite fixtures from `prolfquadata` and
+the Zenodo PTM archive. It does not currently recreate the local `diann_wu345302` payload used by
+`make wu345302-facades`; restore that fixture separately before running the WU345302 facade matrix after `make clean`.

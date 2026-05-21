@@ -1,7 +1,20 @@
-fixtures/
+# Local/generated data -------------------------------------------------------
+#
+# Keep this repository small and cloneable. The integration tests can recreate
+# or download their working data; generated outputs should not enter Git.
+
 .cache/
 logs/
 test-outputs/
 reference/
+
+# Fixture payloads can contain large real-data exports. Keep only the fixture
+# policy document in Git.
+fixtures/*
+!fixtures/README.md
+
+# Generated helper copied from the installed prolfquapp package.
 prolfquapp_docker.sh
+
+# OS/editor noise.
 .DS_Store
