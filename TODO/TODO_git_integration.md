@@ -15,13 +15,13 @@ The integration test harness for prolfquapp is complete and passing locally (403
 - The upstream packages live in **two GitHub orgs**: `fgcz` (prolfqua) and `prolfqua` (prolfquapp, prolfquappPTMreaders)
 
 ### Problem with prolfquadata dependency
-The prolfquadata R package (~135 MB) is used only for 4 data files in fixture generation. Installing it in CI is slow and adds a heavy dependency. Moving these files to Zenodo eliminates this dependency — all fixture data then comes from a single, fast, cacheable Zenodo download.
+The prolfquadata R package (227 MB installed) lives on private GitLab (`gitlab.bfabric.org`), not on CRAN/Bioconductor. CI can't reach this GitLab. Solution: upload the package tarball to Zenodo as-is and install from there. No code changes needed — `system.file(..., package = "prolfquadata")` calls keep working.
 
-Files currently sourced from prolfquadata:
-- `quantdata/annotation_Ionstar2018_PXD003881.xlsx` — sample annotation
-- `quantdata/MAXQuant_IonStar2018_PXD003881.zip` — MaxQuant peptides.txt
-- `quantdata/MSFragger_IonStar2018_PXD003881.zip` — MSFragger MSstats.csv
-- `fastaDBs/uniprot-proteome_UP000005640_reviewed_yes.fasta.gz` — human proteome FASTA
+Files sourced from prolfquadata by `create_test_fixtures.R`:
+- `quantdata/annotation_Ionstar2018_PXD003881.xlsx` (8 KB)
+- `quantdata/MAXQuant_IonStar2018_PXD003881.zip` (106 MB)
+- `quantdata/MSFragger_IonStar2018_PXD003881.zip` (29 MB)
+- `fastaDBs/uniprot-proteome_UP000005640_reviewed_yes.fasta.gz` (7.3 MB)
 
 ### Fixture size breakdown
 | File | Size |
@@ -46,47 +46,55 @@ The 4 reference `.rds` files (2.8 MB total) are small enough to track in git. Mo
 - `integration_test/Makefile` — update `save-references` target output path and `clean-references` target
 - Move existing `fixtures/reference/*.rds` → `reference/*.rds`
 
-### Step 2: Upload prolfquadata files to Zenodo
+### Step 2: Upload prolfquadata to Zenodo (as-is)
 
-**Goal:** Eliminate the prolfquadata R package dependency by hosting its data files on Zenodo alongside the existing PTM data.
+**Goal:** Make prolfquadata installable in CI without access to private GitLab.
 
-**What to upload:** Create a new Zenodo deposit (or add to the existing PTM deposit) containing:
-1. `annotation_Ionstar2018_PXD003881.xlsx` (~50 KB)
-2. `MAXQuant_IonStar2018_PXD003881.zip` (~40 MB)
-3. `MSFragger_IonStar2018_PXD003881.zip` (~50 MB)
-4. `uniprot-proteome_UP000005640_reviewed_yes.fasta.gz` (~25 MB)
+**Approach:** Build the package tarball and upload it to Zenodo unchanged. No disassembly — `system.file()` calls in `create_test_fixtures.R` keep working exactly as they do now.
 
-**Option A (recommended): Single ZIP on existing Zenodo record** — add an `IonStar_PXD003881.zip` containing all 4 files to the existing Zenodo record (https://zenodo.org/records/15879865). This keeps all integration test data in one place. Zenodo supports versioned records, so adding files creates a new version with a new DOI while the old version remains accessible.
+**Steps (manual, user action required):**
+1. Build tarball: `R CMD build <path-to-prolfquadata-source>` → produces `prolfquadata_0.1.0.tar.gz`
+   - If source isn't available, create tarball from installed: package up `/Users/wolski/Library/R/4.5-arm64/prolfquadata/` as a tarball
+2. Upload `prolfquadata_0.1.0.tar.gz` to Zenodo (new deposit or add to existing record https://zenodo.org/records/15879865)
+3. Record the download URL and MD5
 
-**Option B: Separate new Zenodo deposit** — create a fresh Zenodo record just for IonStar data. More modular but means two Zenodo downloads in CI.
+### Step 3: Install prolfquadata from Zenodo in CI and fixture generation
 
-**Manual step (user action required):** Uploading to Zenodo is a manual web action — extract the 4 files from the installed prolfquadata package, ZIP them, upload via Zenodo web UI, and record the new URL + MD5.
+**No changes to `R/create_test_fixtures.R`** — all `system.file(..., package = "prolfquadata")` calls stay as-is.
 
-### Step 3: Update `create_test_fixtures.R` to download from Zenodo
+**Changes to `integration_test/Makefile`:**
+- Add a `install-prolfquadata` target that downloads the tarball from Zenodo (cached in `.cache/`) and runs `R CMD INSTALL`
+- Make `fixtures` depend on `install-prolfquadata`
 
-Replace all `system.file(..., package = "prolfquadata")` calls with Zenodo downloads using the same caching pattern already used for PTM data.
+**Alternatively**, handle this in the GitHub Actions workflow directly:
+```yaml
+- name: Cache prolfquadata tarball
+  uses: actions/cache@v4
+  with:
+    path: .cache/prolfquadata_0.1.0.tar.gz
+    key: prolfquadata-v0.1.0
 
-**Changes to `R/create_test_fixtures.R`:**
-- Add a new constant `IONSTAR_ZENODO_URL` and `IONSTAR_ZENODO_MD5` (values TBD after upload)
-- Add a `get_ionstar_data_dir()` function (mirrors existing `get_ptm_data_dir()`) that downloads + caches the IonStar ZIP
-- Update `create_maxquant_fixture()`: replace `system.file(...)` with paths into the cached IonStar directory
-- Update `create_msstats_fixture()`: same replacement
-- Remove `library(prolfquadata)` / any prolfquadata dependency
+- name: Install prolfquadata from Zenodo
+  run: |
+    if [ ! -f .cache/prolfquadata_0.1.0.tar.gz ]; then
+      mkdir -p .cache
+      curl -L -o .cache/prolfquadata_0.1.0.tar.gz "$PROLFQUADATA_ZENODO_URL"
+    fi
+    R CMD INSTALL .cache/prolfquadata_0.1.0.tar.gz
+```
 
 ### Step 4: Fixture hosting — generate in CI (no pre-built artifacts)
 
 **Decision: generate fixtures fresh in CI** rather than hosting pre-built artifacts.
 
 Rationale:
-- `make fixtures` takes ~3 min and is fully deterministic (downloads from Zenodo only)
+- `make fixtures` takes ~3 min and is fully deterministic
 - Zenodo is a stable, permanent archive — URLs won't break
-- **No R data packages needed** — all source data comes from Zenodo
-- Avoids complexity of managing release assets or external storage
-- The `.cache/` directory can be cached between CI runs with `actions/cache` to cut download time
+- prolfquadata installed from Zenodo tarball (no private GitLab access needed)
+- The `.cache/` directory can be cached between CI runs with `actions/cache`
 
 **CI caching strategy:**
-- Cache `integration_test/.cache/` (contains both Zenodo ZIPs, ~130 MB total) keyed on the Zenodo URL constants in `create_test_fixtures.R`
-- No need to cache R package library for prolfquadata (eliminated)
+- Cache `.cache/` (PTM Zenodo ZIP ~91 MB + prolfquadata tarball ~140 MB)
 - Fixture generation with warm cache: ~1 min (no downloads, just subsetting)
 
 ### Step 5: GitHub Actions workflow for integration_test
@@ -119,20 +127,29 @@ jobs:
         with:
           r-version: 'release'
 
+      - name: Cache downloads (prolfquadata + Zenodo PTM data)
+        uses: actions/cache@v4
+        with:
+          path: .cache/
+          key: zenodo-fixtures-v2  # bump when Zenodo URLs change
+
+      - name: Install prolfquadata from Zenodo
+        run: |
+          if [ ! -f .cache/prolfquadata_0.1.0.tar.gz ]; then
+            mkdir -p .cache
+            curl -L -o .cache/prolfquadata_0.1.0.tar.gz "$PROLFQUADATA_URL"
+          fi
+          R CMD INSTALL .cache/prolfquadata_0.1.0.tar.gz
+        env:
+          PROLFQUADATA_URL: https://zenodo.org/records/XXXXXXX/files/prolfquadata_0.1.0.tar.gz  # TBD
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          # Install ecosystem packages from GitHub source
           extra-packages: |
             fgcz/prolfqua
             prolfqua/prolfquapp
             prolfqua/prolfquappPTMreaders
             local::.
-
-      - name: Cache Zenodo downloads
-        uses: actions/cache@v4
-        with:
-          path: .cache/
-          key: zenodo-fixtures-v2  # bump when Zenodo URLs change
 
       - name: Generate fixtures
         run: make fixtures
@@ -167,7 +184,7 @@ Remotes:
     prolfqua/prolfquappPTMreaders
 ```
 
-**Note:** `prolfquadata` is intentionally absent — all data now comes from Zenodo. The `seqinr`, `readxl`, `readr`, `yaml`, `tidyr` packages are needed by `create_test_fixtures.R`.
+**Note:** `prolfquadata` is NOT listed here — it's installed separately from the Zenodo tarball before `setup-r-dependencies` runs. This avoids `r-lib/actions` trying to resolve it from CRAN/Bioconductor/Remotes.
 
 ### Step 6: Cross-repo trigger workflows
 
@@ -179,7 +196,7 @@ name: Trigger Integration Tests
 
 on:
   push:
-    branches: [main, master, Modelling2R6]
+    branches: [main]
     paths: ['R/**', 'DESCRIPTION', 'NAMESPACE']
 
 jobs:
@@ -230,7 +247,7 @@ Minor tweaks to ensure `make` targets work in CI:
 | `integration_test/.gitignore` | edit | Remove `fixtures/reference` exception if any |
 | `integration_test/tests/testthat/test-dea-regression.R` | edit | Update REFERENCE_DIR path |
 | `integration_test/Makefile` | edit | Update reference paths, CI-compatible targets |
-| `integration_test/R/create_test_fixtures.R` | edit | Replace prolfquadata with Zenodo download |
+| `integration_test/R/create_test_fixtures.R` | no change | `system.file()` calls stay as-is |
 | `integration_test/DESCRIPTION` | create | Minimal project DESCRIPTION for r-lib/actions (no prolfquadata) |
 | `integration_test/.github/workflows/integration-tests.yml` | create | Main CI workflow |
 | `prolfqua/.github/workflows/trigger-integration.yml` | create | Cross-repo trigger |
@@ -239,10 +256,11 @@ Minor tweaks to ensure `make` targets work in CI:
 
 ## Manual steps (user action required)
 
-1. **Upload IonStar data to Zenodo** — extract 4 files from prolfquadata, ZIP, upload to Zenodo, record URL + MD5
-2. **Update constants** in `create_test_fixtures.R` with the actual Zenodo URL and MD5 after upload
-3. **Create PAT** and add as `INTEGRATION_PAT` secret in upstream repos
-4. **Push** integration_test repo to GitHub
+1. **Build prolfquadata tarball**: `R CMD build <prolfquadata-source>` → `prolfquadata_0.1.0.tar.gz`
+2. **Upload tarball to Zenodo** — upload as-is, record download URL
+3. **Update Zenodo URL** in `.github/workflows/integration-tests.yml` `PROLFQUADATA_URL` env var
+4. **Create PAT** and add as `INTEGRATION_PAT` secret in upstream repos
+5. **Push** integration_test repo to GitHub
 
 ## Verification
 

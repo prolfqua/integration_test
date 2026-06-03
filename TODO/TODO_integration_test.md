@@ -29,7 +29,7 @@ Comment: the dependency structure is wrong. prolfquabenchmark depends I think on
 
 
 ```
-Layer 1:  prolfqua                    (github.com/fgcz/prolfqua, branch: Modelling2R6)
+Layer 1:  prolfqua                    (github.com/fgcz/prolfqua, branch: main)
              │
      ┌───────┴───────┐
 Layer 2:  prolfquapp       prophosqua       (can install/check in parallel)
