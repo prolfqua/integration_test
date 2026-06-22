@@ -31,6 +31,9 @@ test-qc-maxquant: fixtures $(LOGDIR)  ## Test QC pipeline with MaxQuant
 test-dea-regression: fixtures $(LOGDIR)  ## Test DEA outputs against saved references
 	Rscript -e "testthat::test_file('tests/testthat/test-dea-regression.R')" 2>&1 | tee $(LOGDIR)/test-dea-regression.log
 
+test-dea-diann-auto-peptide: fixtures $(LOGDIR)  ## Test nested facade auto-selects DIANN_PEPTIDE on real DIA-NN fixture
+	Rscript -e "testthat::test_file('tests/testthat/test-dea-diann-auto-peptide.R')" 2>&1 | tee $(LOGDIR)/test-dea-diann-auto-peptide.log
+
 test-dea-internal: fixtures $(LOGDIR)  ## Test internal calibration (center_to_reference)
 	Rscript -e "testthat::test_file('tests/testthat/test-dea-internal-calibration.R')" 2>&1 | tee $(LOGDIR)/test-dea-internal.log
 	@echo "--- DEA output directories ---" && grep "DEA outputs in:" $(LOGDIR)/test-dea-internal.log || true
@@ -123,4 +126,4 @@ clean:  ## Remove generated fixtures, logs, and dev test outputs (keeps WU345302
 clean-references:  ## Remove only regression references (keeps fixtures)
 	rm -rf $(REFDIR)
 
-.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-internal save-references save-references-docker compare-regression wu345302-facades install clean clean-references
+.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-regression test-dea-diann-auto-peptide test-dea-internal save-references save-references-docker compare-regression wu345302-facades install clean clean-references
