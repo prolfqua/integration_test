@@ -157,6 +157,67 @@ A local `save-references` target also exists for re-baselining after a new relea
 make save-references    # generate baselines from local dev install
 ```
 
+## Cross-version Docker comparison
+
+To check whether DEA estimates drift across **released** Docker image generations (not just dev vs one
+baseline), the same fixture is run through several `prolfqua/prolfquapp` tags and the protein-level
+fold-change (`diff`), `p.value` and `FDR` are correlated pairwise.
+
+`scripts/compare_docker_versions.R` reads each run's `DE_*.xlsx` `diff_exp_analysis` sheet (plus
+`diff_exp_analysis_wide` for FDR), joins on `protein_Id` × `contrast`, and reports Pearson correlation
+and max absolute difference per metric.
+
+### CLI differences across generations
+
+The CLI is **not** stable across the full version range, so the runs cannot share one config:
+
+| Generation | DEA entrypoint | `-s` software key | Config schema |
+|------------|----------------|-------------------|---------------|
+| `0.1.x`    | `CMD_DEA.R`     | unprefixed (`MAXQUANT`, `DIANN`, `FP_TMT`, `MSSTATS`) | older R6 config — **rejects** the 2.x YAML (`cannot add bindings to a locked environment`) |
+| `2.0.x` / `2.2.x` | `CMD_DEA_V2.R` | prefixed (`prolfquapp.MAXQUANT`) | current YAML schema |
+
+For `0.1.x` the config must be generated with that image's own `prolfqua_yaml.sh`. Conveniently its
+defaults (`model=prolfqua`, `aggregate=medpolish`, `transform=robscale`, `FDR=0.1`) match the 2.x
+fixture config, so the comparison is not confounded by different processing options.
+
+### Reproduce
+
+```bash
+# 0.1.x: generate a native config, then run with the unprefixed software key
+mkdir -p test-outputs/vcompare/v018 && cp -r fixtures/maxquant_ionstar/* test-outputs/vcompare/v018/
+( cd test-outputs/vcompare/v018 && \
+  ../../../prolfquapp_docker.sh --image-version 0.1.8 prolfqua_yaml.sh -n robscale -y config.yaml -w cmp018 -s MAXQUANT -o . && \
+  ../../../prolfquapp_docker.sh --image-version 0.1.8 prolfqua_dea.sh  -i . -d dataset.csv -y config.yaml -s MAXQUANT -o . -w cmp018 )
+
+# 2.x: reuse the fixture's 2.x config and the prefixed software key
+for V in 2.0.19 2.2.6; do
+  d=test-outputs/vcompare/v${V//./}; mkdir -p "$d" && cp -r fixtures/maxquant_ionstar/* "$d/"
+  ( cd "$d" && ../../../prolfquapp_docker.sh --image-version "$V" prolfqua_dea.sh \
+      -i . -d dataset.csv -y config.yaml -s prolfquapp.MAXQUANT -o . -w "cmp${V//./}" )
+done
+
+Rscript scripts/compare_docker_versions.R \
+  "0.1.8=$(find test-outputs/vcompare/v018  -name 'DE_*.xlsx' | head -1)" \
+  "2.0.19=$(find test-outputs/vcompare/v2019 -name 'DE_*.xlsx' | head -1)" \
+  "2.2.6=$(find test-outputs/vcompare/v226  -name 'DE_*.xlsx' | head -1)"
+```
+
+On ARM Mac these run under `linux/amd64` emulation (the older images are amd64-only).
+
+### Result (maxquant_ionstar, contrast `e_vs_b`, 100 proteins)
+
+| Pair | diff (log2FC) | p.value | FDR |
+|------|---------------|---------|-----|
+| 0.1.8 → 2.0.19 | 0.999916 (max\|Δ\| 0.011) | 0.9814 (0.23) | 0.9756 (0.08) |
+| 2.0.19 → 2.2.6 | **1.000000 (0)** | **1.000000 (0)** | **1.000000 (0)** |
+| 0.1.8 → 2.2.6 | 0.999916 (max\|Δ\| 0.011) | 0.9814 (0.23) | 0.9756 (0.08) |
+
+**Interpretation:** `2.0.19 → 2.2.6` is **bit-identical** across all three metrics — the contrast-schema
+refactor in `2.2.6` (prolfqua `1.6.3`: `modelName` = facade key, new `estimate_type` column, registry
+consolidation) is purely structural and does not move fold-change or p-value estimates. The only real
+change is `0.1.x → 2.x`: fold-changes stay essentially identical (r ≈ 0.9999) while p-value/FDR shift
+modestly (r ≈ 0.98), reflecting genuine modelling/moderation evolution across the major-version jump.
+
 ## How it works
 
 Each test:
