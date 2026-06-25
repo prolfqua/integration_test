@@ -6,7 +6,6 @@
 .cache/
 logs/
 test-outputs/
-reference/
 
 # Fixture payloads can contain large real-data exports. Keep only the fixture
 # policy document in Git.

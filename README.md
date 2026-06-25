@@ -36,7 +36,6 @@ Ignored locally:
 - `.cache/`
 - `logs/`
 - `test-outputs/`
-- `reference/`
 - `prolfquapp_docker.sh`
 
 The current local checkout can be multiple gigabytes because `test-outputs/` duplicates inputs and rendered reports.
@@ -107,7 +106,6 @@ integration_test/
     create_test_fixtures.R         # One-time fixture generator
   fixtures/
     README.md                      # Fixture data policy; payload directories are ignored
-  reference/                       # Ignored regression references after make save-references
   tests/
     testthat.R                     # Entry point for testthat::test_dir()
     testthat/
@@ -117,9 +115,10 @@ integration_test/
       test-dea-fp-tmt.R            # DEA with FP_TMT preprocessor (TMT, VSN, complex contrasts)
       test-dea-fp-singlesite.R     # DEA with FP_singlesite preprocessor (phospho PTM)
       test-qc-maxquant.R           # QC pipeline (CMD_QUANT_QC.R)
-      test-dea-regression.R        # Compare outputs against saved reference SE objects
       test-dea-internal-calibration.R # DEA with internal calibration
   scripts/
+    docker_regression.sh           # Docker model-matrix regression driver
+    compare_docker_versions.R      # Correlate DEA outputs across runs (the comparator)
     run_wu345302_facades.sh        # Run all registered WU345302 facade models
     summarize_wu345302_facades.R   # Summarize model outputs and write failures.tsv
 ```
@@ -133,39 +132,48 @@ integration_test/
 | test-dea-fp-tmt | CMD_DEA_V2.R | `prolfquapp.FP_TMT` | fp_tmt_total | Same + verifies >=4 complex contrasts (2x3 factorial design) |
 | test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
 | test-qc-maxquant | CMD_QUANT_QC.R | `MAXQUANT` | maxquant_ionstar | HTML reports + XLSX produced |
-| test-dea-regression | CMD_DEA_V2.R | all | all fixtures | Compares SE fold-changes against saved references (correlation > 0.999) |
 | test-dea-internal | CMD_DEA_V2.R | internal fixture config | internal calibration fixture | Checks `center_to_reference` internal calibration workflow |
+
+These functional/feature tests run the **locally installed** prolfquapp (run `make install` first). Numeric
+**regression** is handled separately and is **Docker-only** — see below.
 
 ### Software naming gotcha
 
 CMD_DEA_V2.R uses `get_procfuncs()` which returns **prefixed** keys like `prolfquapp.MAXQUANT`. CMD_QUANT_QC.R uses `prolfqua_preprocess_functions` directly with **unprefixed** keys like `MAXQUANT`. The test files and fixture configs reflect this difference.
 
-## Regression Tests
+## Docker regression
 
-The regression test (`test-dea-regression.R`) compares SummarizedExperiment outputs against saved baselines. **References must be generated from the released Docker image** (`prolfqua/prolfquapp:latest`) to detect regressions against the published version.
-
-```bash
-make save-references-docker   # generate baselines from released Docker image
-make test-dea-regression      # compare local dev output against Docker baselines
-```
-
-On ARM Mac, Docker runs with `--platform linux/amd64` (Rosetta emulation). The `fp_singlesite_phospho` fixture is skipped because the Docker image doesn't include `prolfquappPTMreaders`.
-
-A local `save-references` target also exists for re-baselining after a new release:
+Numeric regression is **Docker-only**: it runs a fixture through *released* `prolfqua/prolfquapp`
+images (never the local dev install) and correlates the protein-level fold-change (`diff`), `p.value`
+and `FDR`. There are no committed reference `.rds` blobs and no local-dev baselines — each run is
+reproduced on the fly, so a check can never drift against a stale binary.
 
 ```bash
-make save-references    # generate baselines from local dev install
+make regression        # maxquant_ionstar model matrix; fails if any r < 0.95
 ```
 
-## Cross-version Docker comparison
+`make regression` calls `scripts/docker_regression.sh`, which runs the model matrix and then
+`scripts/compare_docker_versions.R` (reads each `DE_*.xlsx` `diff_exp_analysis` sheet + the
+`diff_exp_analysis_wide` FDR columns, joins on `protein_Id` × `contrast`, reports Pearson `r` and max
+absolute difference, exits non-zero below `--min-cor`).
 
-To check whether DEA estimates drift across **released** Docker image generations (not just dev vs one
-baseline), the same fixture is run through several `prolfqua/prolfquapp` tags and the protein-level
-fold-change (`diff`), `p.value` and `FDR` are correlated pairwise.
+### Reference chain and model matrix
 
-`scripts/compare_docker_versions.R` reads each run's `DE_*.xlsx` `diff_exp_analysis` sheet (plus
-`diff_exp_analysis_wide` for FDR), joins on `protein_Id` × `contrast`, and reports Pearson correlation
-and max absolute difference per metric.
+| Tag | Role | Models | How the model is chosen |
+|-----|------|--------|-------------------------|
+| `0.1.8` | old reference | `lm`, `lm_missing` only | config `model: prolfqua` + `model_missing:` (no `-m`) |
+| `2.2.6` | model-complete reference | full facade set | `-m <facade>` overrides the config |
+
+The matrix correlates the models that overlap, plus the new rescue against the legacy one:
+
+| Comparison | What it guards |
+|------------|----------------|
+| `0.1.8/lm` ↔ `2.2.6/lm` | the core linear model across the 14-month span |
+| `0.1.8/lm_missing` ↔ `2.2.6/lm_missing` | the legacy missing-group model |
+| `2.2.6/lm_impute` ↔ `2.2.6/lm_missing` | the new LOD-imputation rescue vs the legacy approach |
+
+To run another fixture / version chain, call the driver directly, e.g.
+`bash scripts/docker_regression.sh fragpipe_ionstar prolfquapp.MSSTATS dataset.csv 0.95`.
 
 ### CLI differences across generations
 
@@ -180,7 +188,10 @@ For `0.1.x` the config must be generated with that image's own `prolfqua_yaml.sh
 defaults (`model=prolfqua`, `aggregate=medpolish`, `transform=robscale`, `FDR=0.1`) match the 2.x
 fixture config, so the comparison is not confounded by different processing options.
 
-### Reproduce
+### Manual cross-version comparison
+
+`make regression` covers the model matrix on one fixture. To extend the chain to more tags (the default
+`model: prolfqua` resolution per version) by hand:
 
 ```bash
 # 0.1.x: generate a native config, then run with the unprefixed software key
