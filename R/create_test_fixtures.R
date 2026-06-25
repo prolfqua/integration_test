@@ -119,9 +119,12 @@ subset_fasta <- function(fasta_path, protein_ids, output_path) {
 
   message("  FASTA: keeping ", sum(keep), " of ", length(seqs), " sequences")
   if (sum(keep) > 0) {
+    # attr(.., "Annot") (read with whole.header = TRUE) already includes the
+    # leading ">"; write.fasta() prepends its own, so strip it here to avoid
+    # producing malformed ">>" headers that break the FASTA-to-protein join.
     seqinr::write.fasta(
       sequences = seqs[keep],
-      names = sapply(seqs[keep], attr, "Annot"),
+      names = sub("^>", "", sapply(seqs[keep], attr, "Annot")),
       file.out = output_path,
       as.string = TRUE
     )
