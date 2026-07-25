@@ -27,6 +27,9 @@ test-dea-fp-tmt: fixtures $(LOGDIR)  ## Test DEA with FP_TMT preprocessor
 test-dea-fp-singlesite: fixtures $(LOGDIR)  ## Test DEA with FP_singlesite (phospho)
 	Rscript -e "testthat::test_file('tests/testthat/test-dea-fp-singlesite.R')" 2>&1 | tee $(LOGDIR)/test-dea-fp-singlesite.log
 
+test-dea-bgs-site: fixtures $(LOGDIR)  ## Test DEA with Spectronaut BGS_site (phospho)
+	Rscript -e "testthat::test_file('tests/testthat/test-dea-bgs-site.R')" 2>&1 | tee $(LOGDIR)/test-dea-bgs-site.log
+
 test-qc-maxquant: fixtures $(LOGDIR)  ## Test QC pipeline with MaxQuant
 	Rscript -e "testthat::test_file('tests/testthat/test-qc-maxquant.R')" 2>&1 | tee $(LOGDIR)/test-qc-maxquant.log
 
@@ -41,7 +44,7 @@ test-dea-internal: fixtures $(LOGDIR)  ## Test internal calibration (center_to_r
 
 fixtures: fixtures/.stamp  ## Generate fixture data from real datasets (~3 min)
 
-fixtures/.stamp:
+fixtures/.stamp: R/create_test_fixtures.R
 	Rscript R/create_test_fixtures.R
 	touch $@
 
@@ -70,8 +73,11 @@ clean:  ## Remove generated fixtures, logs, and test outputs (keeps WU345302 fix
 	rm -rf fixtures/fragpipe_ionstar
 	rm -rf fixtures/fp_tmt_total
 	rm -rf fixtures/fp_singlesite_phospho
+	rm -rf fixtures/bgs_site_phospho
 	rm -rf tests/testthat/_snaps
 	rm -rf $(LOGDIR)
 	rm -rf test-outputs
 
-.PHONY: help test test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite test-qc-maxquant test-dea-diann-auto-peptide test-dea-internal fixtures install regression wu345302-facades clean
+.PHONY: help test fixtures install regression wu345302-facades clean
+.PHONY: test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite
+.PHONY: test-dea-bgs-site test-qc-maxquant test-dea-diann-auto-peptide test-dea-internal

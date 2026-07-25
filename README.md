@@ -1,13 +1,15 @@
 # Integration Tests for prolfquapp CLI Pipelines
 
-Cross-package integration tests for `prolfqua_dea.sh` (CMD_DEA_V2.R) and `prolfqua_qc.sh` (CMD_QUANT_QC.R). These test the full pipeline end-to-end using small fixture datasets (~100 proteins) subsetted from real data.
+Cross-package integration tests for `prolfqua_dea.sh` (CMD_DEA_V2.R) and `prolfqua_qc.sh` (CMD_QUANT_QC.R). These test
+the full pipeline end-to-end using small fixture datasets derived from real data.
 
 ## Prerequisites
 
 The fixture generator needs:
 - `prolfquadata` package installed (IonStar MaxQuant + MSFragger ZIPs)
-- `prophosqua` repo checked out alongside the other packages (PTM example data)
+- `prolfquappPTMreaders` installed (bundled Spectronaut BGS example)
 - `seqinr` package
+- an Internet connection for the cached FragPipe PTM example download
 
 ## Quick Start
 
@@ -18,7 +20,7 @@ cd integration_test
 make help               # show all targets
 make install            # reinstall prolfqua + prolfquapp + prolfquappPTMreaders from local source
 make fixtures           # generate fixture data from real datasets (one-time, ~3 min)
-make test               # run all integration tests (~2-3 min)
+make test               # run all integration tests (~10-12 min)
 ```
 
 ## Repository and Data Policy
@@ -67,6 +69,7 @@ make test               # check nothing broke
 make test-dea-maxquant
 make test-qc-maxquant
 make test-dea-fp-singlesite
+make test-dea-bgs-site
 make test-dea-internal
 # etc. — see make help for the full list
 ```
@@ -114,6 +117,7 @@ integration_test/
       test-dea-msstats.R           # DEA with MSSTATS preprocessor
       test-dea-fp-tmt.R            # DEA with FP_TMT preprocessor (TMT, VSN, complex contrasts)
       test-dea-fp-singlesite.R     # DEA with FP_singlesite preprocessor (phospho PTM)
+      test-dea-bgs-site.R          # DEA with Spectronaut BGS_site preprocessor (phospho PTM)
       test-qc-maxquant.R           # QC pipeline (CMD_QUANT_QC.R)
       test-dea-internal-calibration.R # DEA with internal calibration
   scripts/
@@ -131,6 +135,7 @@ integration_test/
 | test-dea-msstats | CMD_DEA_V2.R | `prolfquapp.MSSTATS` | fragpipe_ionstar | Same outputs; different preprocessor path |
 | test-dea-fp-tmt | CMD_DEA_V2.R | `prolfquapp.FP_TMT` | fp_tmt_total | Same + verifies >=4 complex contrasts (2x3 factorial design) |
 | test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
+| test-dea-bgs-site | CMD_DEA_V2.R | `prolfquappPTMreaders.BGS_site` | bgs_site_phospho | Same + retained Spectronaut phosphosite and sequence-window annotations |
 | test-qc-maxquant | CMD_QUANT_QC.R | `MAXQUANT` | maxquant_ionstar | HTML reports + XLSX produced |
 | test-dea-internal | CMD_DEA_V2.R | internal fixture config | internal calibration fixture | Checks `center_to_reference` internal calibration workflow |
 
@@ -249,6 +254,7 @@ The helper functions `run_dea()` and `run_qc()` in `helper-common.R` handle the 
 | fragpipe_ionstar | prolfquadata | IonStar MSFragger ZIP / `MSstats.csv` | ~50 proteins, groups B vs E |
 | fp_tmt_total | prophosqua | PTM_example_analysis_v2 / `psm.tsv` (70 MB) | ~100 proteins, 22 samples, 4 contrasts |
 | fp_singlesite_phospho | prophosqua | PTM_example_analysis_v2 / `abundance_single-site_None.tsv` | ~50 proteins (multiple sites each), 22 samples, 4 contrasts |
+| bgs_site_phospho | prolfquappPTMreaders | `inst/extdata/BGS_site/Report_test.tsv` | Real sites expanded deterministically to 2 control + 2 treated acquisitions |
 | diann_wu345302 | local fixture payload | DIA-NN report, FASTA files, dataset, and config template | WU345302 facade matrix |
 
 ## Regenerating fixtures
@@ -258,9 +264,11 @@ make clean              # remove generated fixtures and outputs, keep diann_wu34
 make fixtures           # regenerate from source data
 ```
 
-`make fixtures` regenerates the standard MaxQuant, MSstats, FP_TMT, and FP_singlesite fixtures from `prolfquadata` and
-the Zenodo PTM archive. It does not currently recreate the local `diann_wu345302` payload used by
-`make wu345302-facades`.
+`make fixtures` regenerates the standard MaxQuant, MSstats, FP_TMT, FP_singlesite, and BGS_site fixtures from
+`prolfquadata`, `prolfquappPTMreaders`, and the Zenodo PTM archive. The BGS source report contains one real acquisition;
+the generator retains its sites and metadata and creates two deterministic control and two deterministic treated
+acquisitions by scaling `PTM.Quantity`. This fixture tests reader and DEA plumbing, not biological reproducibility.
+The target does not currently recreate the local `diann_wu345302` payload used by `make wu345302-facades`.
 
 `make clean` removes the generated standard fixtures, logs, and development outputs, but intentionally keeps
 `fixtures/diann_wu345302` because that local DIA-NN payload is not recreated by `make fixtures`.

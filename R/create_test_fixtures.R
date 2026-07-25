@@ -440,6 +440,121 @@ create_fp_singlesite_fixture <- function(ptm_dir) {
 
 
 # =============================================================================
+# 1e. Spectronaut BGS phosphosite fixture
+# =============================================================================
+create_bgs_site_fixture <- function() {
+  message("\n=== Creating Spectronaut BGS phosphosite fixture ===")
+  outdir <- file.path(FIXTURE_DIR, "bgs_site_phospho")
+  dir.create(file.path(outdir, "fasta"), recursive = TRUE, showWarnings = FALSE)
+
+  source_dir <- system.file(
+    "extdata",
+    "BGS_site",
+    package = "prolfquappPTMreaders"
+  )
+  source_report <- file.path(source_dir, "Report_test.tsv")
+  source_fasta <- file.path(source_dir, "database.fasta")
+  if (!file.exists(source_report) || !file.exists(source_fasta)) {
+    stop(
+      "BGS example data is unavailable. Install prolfquappPTMreaders before ",
+      "running make fixtures."
+    )
+  }
+
+  source_data <- readr::read_tsv(source_report, show_col_types = FALSE)
+  sample_design <- data.frame(
+    R.FileName = c(
+      "BGS_control_1",
+      "BGS_control_2",
+      "BGS_treated_1",
+      "BGS_treated_2"
+    ),
+    R.Condition = rep(c("control", "treated"), each = 2),
+    R.Replicate = rep(1:2, times = 2),
+    replicate_scale = c(0.98, 1.02, 0.97, 1.03),
+    stringsAsFactors = FALSE
+  )
+
+  site_index <- match(
+    source_data[["PTM.CollapseKey"]],
+    unique(source_data[["PTM.CollapseKey"]])
+  )
+  site_effect <- ifelse(site_index %% 2L == 0L, 1.75, 0.65)
+
+  sample_reports <- lapply(seq_len(nrow(sample_design)), function(i) {
+    report <- source_data
+    report[["R.FileName"]] <- sample_design[["R.FileName"]][[i]]
+    report[["R.Condition"]] <- sample_design[["R.Condition"]][[i]]
+    report[["R.Replicate"]] <- sample_design[["R.Replicate"]][[i]]
+
+    treatment_effect <- if (sample_design[["R.Condition"]][[i]] == "treated") {
+      site_effect
+    } else {
+      1
+    }
+    report[["PTM.Quantity"]] <- report[["PTM.Quantity"]] *
+      sample_design[["replicate_scale"]][[i]] *
+      treatment_effect
+    report
+  })
+  fixture_data <- dplyr::bind_rows(sample_reports)
+
+  readr::write_tsv(fixture_data, file.path(outdir, "Report_test.tsv"))
+  copied <- file.copy(
+    source_fasta,
+    file.path(outdir, "fasta", "database.fasta"),
+    overwrite = TRUE
+  )
+  stopifnot(copied)
+
+  annotation <- data.frame(
+    raw.file = sample_design[["R.FileName"]],
+    Name = sample_design[["R.FileName"]],
+    Group = sample_design[["R.Condition"]],
+    CONTROL = ifelse(sample_design[["R.Condition"]] == "control", "C", "T"),
+    stringsAsFactors = FALSE
+  )
+  write.csv(annotation, file.path(outdir, "dataset.csv"), row.names = FALSE)
+
+  config <- list(
+    path = ".",
+    zipdir_name = "DEA_test_bgs_site",
+    prefix = "DEA",
+    software = "prolfquappPTMreaders.BGS_site",
+    project_spec = list(
+      input_URL = "", workunit_Id = "test_bgs_site",
+      order_Id = "", project_name = "integration_test", project_Id = ""
+    ),
+    processing_options = list(
+      model = "prolfqua", model_missing = TRUE, interaction = FALSE,
+      nr_peptides = 1,
+      pattern_contaminants = "^zz|^CON|Cont_",
+      pattern_decoys = "^REV_|^rev_",
+      remove_decoys = FALSE, remove_cont = FALSE,
+      FDR_threshold = 0.1, diff_threshold = 1.0,
+      aggregate = "medpolish", transform = "robscale"
+    ),
+    ext_reader = list(
+      dataset = list(),
+      extra_args = "list()",
+      preprocess = list(),
+      get_files = list()
+    ),
+    group = "G_"
+  )
+  yaml::write_yaml(config, file.path(outdir, "config.yaml"))
+  message(
+    "  Report: ",
+    nrow(fixture_data),
+    " rows across ",
+    nrow(sample_design),
+    " samples"
+  )
+  message("  Done: ", outdir)
+}
+
+
+# =============================================================================
 # Main
 # =============================================================================
 message("Creating integration test fixtures in: ", FIXTURE_DIR)
@@ -448,6 +563,7 @@ dir.create(FIXTURE_DIR, recursive = TRUE, showWarnings = FALSE)
 
 create_maxquant_fixture()
 create_msstats_fixture()
+create_bgs_site_fixture()
 
 # PTM fixtures: download from Zenodo (cached in .cache/)
 ptm_dir <- get_ptm_data_dir()
