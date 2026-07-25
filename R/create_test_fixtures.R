@@ -555,6 +555,130 @@ create_bgs_site_fixture <- function() {
 
 
 # =============================================================================
+# 1f. Bundled FragPipe PTM fixtures
+# =============================================================================
+write_ptm_config <- function(outdir, software, workunit,
+                             transform = "robscale") {
+  config <- list(
+    path = ".",
+    zipdir_name = paste0("DEA_", workunit),
+    prefix = "DEA",
+    software = software,
+    project_spec = list(
+      input_URL = "", workunit_Id = workunit,
+      order_Id = "", project_name = "integration_test", project_Id = ""
+    ),
+    processing_options = list(
+      model = "prolfqua", model_missing = TRUE, interaction = FALSE,
+      nr_peptides = 1,
+      pattern_contaminants = "^zz|^CON|Cont_",
+      pattern_decoys = "^REV_|^rev_",
+      remove_decoys = FALSE, remove_cont = FALSE,
+      FDR_threshold = 0.1, diff_threshold = 1.0,
+      aggregate = "medpolish", transform = transform
+    ),
+    ext_reader = list(
+      dataset = list(),
+      extra_args = "list()",
+      preprocess = list(),
+      get_files = list()
+    ),
+    group = "G_"
+  )
+  yaml::write_yaml(config, file.path(outdir, "config.yaml"))
+}
+
+
+create_fp_multisite_fixture <- function() {
+  message("\n=== Creating FragPipe multisite phospho fixture ===")
+  outdir <- file.path(FIXTURE_DIR, "fp_multisite_phospho")
+  dir.create(file.path(outdir, "fasta"), recursive = TRUE, showWarnings = FALSE)
+
+  source_dir <- system.file("extdata", "FP_multisite",
+                            package = "prolfquappPTMreaders")
+  source_data <- file.path(source_dir, "abundance_multi-site_None.tsv")
+  source_fasta <- file.path(source_dir, "database.fasta")
+  if (!file.exists(source_data) || !file.exists(source_fasta)) {
+    stop("FragPipe multisite example data is unavailable.")
+  }
+
+  multisite_data <- readr::read_tsv(source_data, show_col_types = FALSE)
+  sample_columns <- names(multisite_data)[
+    (match("ReferenceIntensity", names(multisite_data)) + 1):ncol(multisite_data)
+  ]
+  replicate_scales <- c(1.01, 0.99, 1.02, 0.98)
+  stopifnot(length(sample_columns) == length(replicate_scales))
+  for (i in seq_along(sample_columns)) {
+    replicate_name <- sub("_1$", "_2", sample_columns[[i]])
+    multisite_data[[replicate_name]] <-
+      multisite_data[[sample_columns[[i]]]] * replicate_scales[[i]]
+  }
+  readr::write_tsv(multisite_data,
+                   file.path(outdir, "abundance_multi-site_None.tsv"))
+  copied <- file.copy(
+    source_fasta,
+    file.path(outdir, "fasta", "database.fasta"),
+    overwrite = TRUE
+  )
+  stopifnot(copied)
+
+  files <- prolfquappPTMreaders::get_FP_multi_site_files(outdir)
+  annotation <- prolfquappPTMreaders::dataset_template_FP_multi_site(files)
+  annotation$Group <- ifelse(grepl("^WT", annotation$Name), "WT", "KO")
+  annotation$Subject <- sub(".*_(\\d+)$", "\\1", annotation$Name)
+  annotation$CONTROL <- ifelse(annotation$Group == "WT", "C", "T")
+  write.csv(annotation, file.path(outdir, "dataset.csv"), row.names = FALSE)
+
+  write_ptm_config(
+    outdir,
+    software = "prolfquappPTMreaders.FP_multisite",
+    workunit = "test_fp_multisite"
+  )
+  message("  Done: ", outdir)
+}
+
+
+create_fp_combined_sty_fixture <- function() {
+  message("\n=== Creating FragPipe combined-STY phospho fixture ===")
+  outdir <- file.path(FIXTURE_DIR, "fp_combined_sty_phospho")
+  dir.create(file.path(outdir, "fasta"), recursive = TRUE, showWarnings = FALSE)
+
+  source_dir <- system.file("extdata", "FP_combined_STY",
+                            package = "prolfquappPTMreaders")
+  source_data <- file.path(source_dir, "combined_site_STY_79.9663.tsv")
+  source_fasta <- file.path(source_dir, "database.fasta")
+  source_manifest <- file.path(source_dir, "fragpipe-files.fp-manifest")
+  if (!all(file.exists(c(source_data, source_fasta, source_manifest)))) {
+    stop("FragPipe combined-STY example data is unavailable.")
+  }
+
+  copied <- c(
+    file.copy(source_data, file.path(outdir, basename(source_data)),
+              overwrite = TRUE),
+    file.copy(source_manifest, file.path(outdir, basename(source_manifest)),
+              overwrite = TRUE),
+    file.copy(source_fasta, file.path(outdir, "fasta", "database.fasta"),
+              overwrite = TRUE)
+  )
+  stopifnot(all(copied))
+
+  files <- prolfquappPTMreaders::get_FP_combined_STY_files(outdir)
+  annotation <- prolfquappPTMreaders::dataset_template_FP_combined_STY(files)
+  annotation$Group <- ifelse(grepl("_37C_", annotation$Name), "37C", "42C")
+  annotation$Subject <- seq_len(nrow(annotation))
+  annotation$Control <- ifelse(annotation$Group == "37C", "C", "T")
+  write.csv(annotation, file.path(outdir, "dataset.csv"), row.names = FALSE)
+
+  write_ptm_config(
+    outdir,
+    software = "prolfquappPTMreaders.FP_combined_STY",
+    workunit = "test_fp_combined_sty"
+  )
+  message("  Done: ", outdir)
+}
+
+
+# =============================================================================
 # Main
 # =============================================================================
 message("Creating integration test fixtures in: ", FIXTURE_DIR)
@@ -569,6 +693,8 @@ create_bgs_site_fixture()
 ptm_dir <- get_ptm_data_dir()
 create_fp_tmt_fixture(ptm_dir)
 create_fp_singlesite_fixture(ptm_dir)
+create_fp_multisite_fixture()
+create_fp_combined_sty_fixture()
 
 message("\n=== All fixtures created successfully ===")
 message("Fixture directory: ", normalizePath(FIXTURE_DIR))

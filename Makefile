@@ -1,5 +1,8 @@
 export NOT_CRAN=true
 
+SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -c
+
 .DEFAULT_GOAL := help
 
 help:  ## Show this help
@@ -26,6 +29,12 @@ test-dea-fp-tmt: fixtures $(LOGDIR)  ## Test DEA with FP_TMT preprocessor
 
 test-dea-fp-singlesite: fixtures $(LOGDIR)  ## Test DEA with FP_singlesite (phospho)
 	Rscript -e "testthat::test_file('tests/testthat/test-dea-fp-singlesite.R')" 2>&1 | tee $(LOGDIR)/test-dea-fp-singlesite.log
+
+test-dea-fp-multisite: fixtures $(LOGDIR)  ## Test DEA with FP_multisite (phospho)
+	Rscript -e "testthat::test_file('tests/testthat/test-dea-fp-multisite.R')" 2>&1 | tee $(LOGDIR)/test-dea-fp-multisite.log
+
+test-dea-fp-combined-sty: fixtures $(LOGDIR)  ## Test DEA with FP_combined_STY (phospho)
+	Rscript -e "testthat::test_file('tests/testthat/test-dea-fp-combined-sty.R')" 2>&1 | tee $(LOGDIR)/test-dea-fp-combined-sty.log
 
 test-dea-bgs-site: fixtures $(LOGDIR)  ## Test DEA with Spectronaut BGS_site (phospho)
 	Rscript -e "testthat::test_file('tests/testthat/test-dea-bgs-site.R')" 2>&1 | tee $(LOGDIR)/test-dea-bgs-site.log
@@ -73,6 +82,8 @@ clean:  ## Remove generated fixtures, logs, and test outputs (keeps WU345302 fix
 	rm -rf fixtures/fragpipe_ionstar
 	rm -rf fixtures/fp_tmt_total
 	rm -rf fixtures/fp_singlesite_phospho
+	rm -rf fixtures/fp_multisite_phospho
+	rm -rf fixtures/fp_combined_sty_phospho
 	rm -rf fixtures/bgs_site_phospho
 	rm -rf tests/testthat/_snaps
 	rm -rf $(LOGDIR)
@@ -80,4 +91,5 @@ clean:  ## Remove generated fixtures, logs, and test outputs (keeps WU345302 fix
 
 .PHONY: help test fixtures install regression wu345302-facades clean
 .PHONY: test-dea-maxquant test-dea-msstats test-dea-fp-tmt test-dea-fp-singlesite
-.PHONY: test-dea-bgs-site test-qc-maxquant test-dea-diann-auto-peptide test-dea-internal
+.PHONY: test-dea-fp-multisite test-dea-fp-combined-sty test-dea-bgs-site
+.PHONY: test-qc-maxquant test-dea-diann-auto-peptide test-dea-internal

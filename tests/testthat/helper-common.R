@@ -160,6 +160,18 @@ find_dea_outputs <- function(workdir) {
   )
 }
 
+expect_complete_protein_annotation <- function(result_table) {
+  required <- c("description", "gene_name", "CON")
+  expect_equal(setdiff(required, colnames(result_table)), character())
+  for (column in intersect(required, colnames(result_table))) {
+    expect_identical(
+      sum(is.na(result_table[[column]])),
+      0L,
+      label = paste(column, "is complete")
+    )
+  }
+}
+
 # Find output files produced by QC in the workdir
 find_qc_outputs <- function(workdir) {
   all_files <- list.files(workdir, recursive = TRUE, full.names = TRUE)

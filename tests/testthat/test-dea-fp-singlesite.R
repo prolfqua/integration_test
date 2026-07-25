@@ -29,6 +29,7 @@ test_that("DEA pipeline runs with FP_singlesite on phospho fixture", {
   expect_gte(length(contrast_cols), 4, label = "At least 4 contrast columns")
 
   first_contrast <- rd[[contrast_cols[1]]]
+  expect_complete_protein_annotation(first_contrast)
   expect_true("diff" %in% colnames(first_contrast))
   expect_true("FDR" %in% colnames(first_contrast))
   expect_gt(sum(!is.na(first_contrast$diff)), 0, label = "Non-NA diff values")

@@ -69,6 +69,8 @@ make test               # check nothing broke
 make test-dea-maxquant
 make test-qc-maxquant
 make test-dea-fp-singlesite
+make test-dea-fp-multisite
+make test-dea-fp-combined-sty
 make test-dea-bgs-site
 make test-dea-internal
 # etc. — see make help for the full list
@@ -117,6 +119,8 @@ integration_test/
       test-dea-msstats.R           # DEA with MSSTATS preprocessor
       test-dea-fp-tmt.R            # DEA with FP_TMT preprocessor (TMT, VSN, complex contrasts)
       test-dea-fp-singlesite.R     # DEA with FP_singlesite preprocessor (phospho PTM)
+      test-dea-fp-multisite.R      # DEA with FP_multisite preprocessor (phospho PTM)
+      test-dea-fp-combined-sty.R   # DEA with FP_combined_STY preprocessor (phospho PTM)
       test-dea-bgs-site.R          # DEA with Spectronaut BGS_site preprocessor (phospho PTM)
       test-qc-maxquant.R           # QC pipeline (CMD_QUANT_QC.R)
       test-dea-internal-calibration.R # DEA with internal calibration
@@ -134,8 +138,10 @@ integration_test/
 | test-dea-maxquant | CMD_DEA_V2.R | `prolfquapp.MAXQUANT` | maxquant_ionstar | HTML, XLSX, SE.rds, RNK, parquet; SE has contrast columns with diff/FDR |
 | test-dea-msstats | CMD_DEA_V2.R | `prolfquapp.MSSTATS` | fragpipe_ionstar | Same outputs; different preprocessor path |
 | test-dea-fp-tmt | CMD_DEA_V2.R | `prolfquapp.FP_TMT` | fp_tmt_total | Same + verifies >=4 complex contrasts (2x3 factorial design) |
-| test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation; skips if prolfquappPTMreaders not installed |
-| test-dea-bgs-site | CMD_DEA_V2.R | `prolfquappPTMreaders.BGS_site` | bgs_site_phospho | Same + retained Spectronaut phosphosite and sequence-window annotations |
+| test-dea-fp-singlesite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_singlesite` | fp_singlesite_phospho | Same + PTM site-level aggregation and complete protein annotation |
+| test-dea-fp-multisite | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_multisite` | fp_multisite_phospho | Same + multisite hierarchy and complete protein annotation |
+| test-dea-fp-combined-sty | CMD_DEA_V2.R | `prolfquappPTMreaders.FP_combined_STY` | fp_combined_sty_phospho | Same + combined-STY hierarchy and complete protein annotation |
+| test-dea-bgs-site | CMD_DEA_V2.R | `prolfquappPTMreaders.BGS_site` | bgs_site_phospho | Same + Spectronaut site hierarchy and complete protein annotation |
 | test-qc-maxquant | CMD_QUANT_QC.R | `MAXQUANT` | maxquant_ionstar | HTML reports + XLSX produced |
 | test-dea-internal | CMD_DEA_V2.R | internal fixture config | internal calibration fixture | Checks `center_to_reference` internal calibration workflow |
 
