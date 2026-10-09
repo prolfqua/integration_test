@@ -21,7 +21,6 @@ SAME_MODELS=(
   limpa
   lm
   lm_impute
-  lm_missing
   rlm
   saint
 )
