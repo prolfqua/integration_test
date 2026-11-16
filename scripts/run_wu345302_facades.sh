@@ -27,7 +27,7 @@ SAME_MODELS=(
 
 # Nested-needs facades (peptide-level input → protein FC).
 NESTED_MODELS=(
-  firth_nested
+  binomial_firth_nested
   limpa_nested
   lmer_nested
   ropeca_nested
