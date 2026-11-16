@@ -34,7 +34,7 @@ test_that("DEA pipeline runs with BGS_site on Spectronaut phosphosite fixture", 
   expect_gt(length(contrast_cols), 0, label = "Contrast columns in rowData")
 
   first_contrast <- row_data[[contrast_cols[1]]]
-  expect_complete_protein_annotation(first_contrast)
+  expect_complete_protein_annotation(row_data$annotation)
   expect_true(
     "diff" %in% colnames(first_contrast),
     label = "diff column in contrast"

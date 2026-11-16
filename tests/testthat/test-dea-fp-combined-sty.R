@@ -37,6 +37,6 @@ test_that("DEA pipeline runs with FP_combined_STY on phospho fixture", {
     setdiff(c("site", "diff", "FDR"), colnames(first_contrast)),
     character()
   )
-  expect_complete_protein_annotation(first_contrast)
+  expect_complete_protein_annotation(row_data$annotation)
   expect_gt(sum(!is.na(first_contrast$diff)), 0, label = "Non-NA diff values")
 })
