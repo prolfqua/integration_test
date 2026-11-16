@@ -1,6 +1,8 @@
 export NOT_CRAN=true
 
-SHELL := /bin/bash
+# pipefail in SHELL itself: macOS /usr/bin/make (GNU make 3.81) ignores .SHELLFLAGS, so `Rscript ... | tee`
+# would report success when tests fail
+SHELL := /bin/bash -o pipefail
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
