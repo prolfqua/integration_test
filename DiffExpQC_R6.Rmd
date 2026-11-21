@@ -56,7 +56,7 @@ The analysis of missing values can be an essential indicator of potential proble
 ```{r missingProtein, eval=TRUE, fig.cap="(ref:missingProtein)", fig.alt = "",fig.height=5, fig.width=8}
 
 pl <- dea$lfq_data_raw$get_Plotter()
-p2 <- pl$missigness_histogram()
+p2 <- pl$missingness_histogram()
 
 sr <- dea$lfq_data_raw$get_Summariser()
 p1 <- sr$plot_missingness_per_group()
