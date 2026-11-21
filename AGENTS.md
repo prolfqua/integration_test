@@ -8,7 +8,7 @@ Cross-package integration tests for the prolfquapp CLI pipelines (`prolfqua_dea.
 
 ```bash
 make help                    # Show all targets
-make install                 # Reinstall prolfqua + prolfquapp + prolfquappPTMreaders from local source
+make install                 # Reinstall prolfqua + prolfquasaint + prolfquapp + prolfquappPTMreaders via their Makefiles
 make fixtures                # Generate fixture data from real datasets (one-time, ~3 min)
 make test                    # Run all integration tests (~2-3 min)
 make test-dea-maxquant       # Run a single test file

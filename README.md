@@ -18,7 +18,7 @@ All commands run from `integration_test/`:
 ```bash
 cd integration_test
 make help               # show all targets
-make install            # reinstall prolfqua + prolfquapp + prolfquappPTMreaders from local source
+make install            # reinstall prolfqua + prolfquasaint + prolfquapp + prolfquappPTMreaders via their Makefiles
 make fixtures           # generate fixture data from real datasets (one-time, ~3 min)
 make test               # run all integration tests (~10-12 min)
 ```

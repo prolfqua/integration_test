@@ -59,10 +59,11 @@ fixtures/.stamp: R/create_test_fixtures.R
 	Rscript R/create_test_fixtures.R
 	touch $@
 
-install:  ## Reinstall prolfqua + prolfquapp + prolfquappPTMreaders from local source
-	Rscript -e "devtools::install('../prolfqua', upgrade = FALSE)"
-	Rscript -e "devtools::install('../prolfquapp', build_vignettes = TRUE, upgrade = FALSE)"
-	Rscript -e "devtools::install('../prolfquappPTMreaders', upgrade = FALSE)"
+install:  ## Reinstall prolfqua + prolfquasaint + prolfquapp + prolfquappPTMreaders via their Makefiles
+	$(MAKE) -C ../prolfqua install
+	$(MAKE) -C ../prolfquasaint install
+	$(MAKE) -C ../prolfquapp install
+	$(MAKE) -C ../prolfquappPTMreaders install
 
 # --- Docker regression (released images only) --------------------------------
 # Runs a fixture through released Docker tags / models and correlates the
